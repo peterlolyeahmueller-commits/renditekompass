@@ -4,10 +4,8 @@ import {
   ResponsiveContainer, CartesianGrid, ReferenceLine
 } from "recharts";
 
-const ABGELT_SATZ  = 0.27;
-const TF_DEPOT     = 0.30;
-const TF_FLEX      = 0.15;
-const EFF_ST_DEPOT = (1 - TF_DEPOT) * ABGELT_SATZ; // 18.9%
+const TF_DEPOT = 0.30;
+const TF_FLEX  = 0.15;
 
 function useWindowWidth() {
   const [width, setWidth] = useState(typeof window !== "undefined" ? window.innerWidth : 1200);
@@ -19,8 +17,9 @@ function useWindowWidth() {
   return width;
 }
 
-function simuliereDepot({ laufzeit, sparrate, startkapital, bruttoRendite, fondskosten, vorabDrag, rebalDrag }) {
+function simuliereDepot({ laufzeit, sparrate, startkapital, bruttoRendite, fondskosten, vorabDrag, rebalDrag, kapSt }) {
   const nettoRendite = bruttoRendite - fondskosten - vorabDrag - rebalDrag;
+  const effStDepot   = (1 - TF_DEPOT) * kapSt;
   let wert = Math.max(startkapital, 0);
   let eingezahlt = startkapital;
   const jahre = [];
@@ -31,9 +30,9 @@ function simuliereDepot({ laufzeit, sparrate, startkapital, bruttoRendite, fonds
   }
   const bruttoEndwert = wert;
   const gewinn        = Math.max(0, bruttoEndwert - eingezahlt);
-  const schlusssteuer = gewinn * EFF_ST_DEPOT;
+  const schlusssteuer = gewinn * effStDepot;
   const nettoEndwert  = bruttoEndwert - schlusssteuer;
-  return { bruttoEndwert, nettoEndwert, schlusssteuer, gesamtEingezahlt: eingezahlt, nettoRendite, jahre };
+  return { bruttoEndwert, nettoEndwert, schlusssteuer, gesamtEingezahlt: eingezahlt, nettoRendite, effStDepot, jahre };
 }
 
 function simuliereFlex({ laufzeit, sparrate, startkapital, bruttoRendite, effektivKosten, steuersatz }) {
@@ -56,6 +55,7 @@ function simuliereFlex({ laufzeit, sparrate, startkapital, bruttoRendite, effekt
 
 const fmt    = n => new Intl.NumberFormat("de-DE", { style:"currency", currency:"EUR", maximumFractionDigits:0 }).format(n);
 const fmtPct = (n, d=2) => (n*100).toFixed(d) + " %";
+const fmtPP  = (n, d=2) => (n>=0?"+":"") + (n*100).toFixed(d) + " pp";
 
 function CustomTooltip({ active, payload, label, laufzeit }) {
   if (!active || !payload?.length) return null;
@@ -83,21 +83,23 @@ export default function RenditeKompass() {
   const [startkapital,  setStartkapital]  = useState(0);
   const [bruttoRendite, setBruttoRendite] = useState(7);
   const [steuersatz,    setSteuersatz]    = useState(20);
+  const [kapSt,         setKapSt]         = useState(27);
   const [fondskosten,   setFondskosten]   = useState(0.20);
   const [vorabDrag,     setVorabDrag]     = useState(0.15);
   const [rebalDrag,     setRebalDrag]     = useState(0.40);
   const [flexKosten,    setFlexKosten]    = useState(1.02);
   const [activeTab,     setActiveTab]     = useState("vergleich");
-  const vw = useWindowWidth();
-  const isMobile  = vw < 860;
-  const isNarrow  = vw < 560;
-  const isMedium  = vw < 1100;
+  const vw       = useWindowWidth();
+  const isMobile = vw < 860;
+  const isNarrow = vw < 560;
+  const isMedium = vw < 1100;
 
   const R = useMemo(() => {
     const r  = bruttoRendite / 100;
     const st = steuersatz / 100;
+    const ks = kapSt / 100;
     const depot = simuliereDepot({ laufzeit, sparrate, startkapital, bruttoRendite: r,
-      fondskosten: fondskosten/100, vorabDrag: vorabDrag/100, rebalDrag: rebalDrag/100 });
+      fondskosten: fondskosten/100, vorabDrag: vorabDrag/100, rebalDrag: rebalDrag/100, kapSt: ks });
     const flex = simuliereFlex({ laufzeit, sparrate, startkapital, bruttoRendite: r,
       effektivKosten: flexKosten/100, steuersatz: st });
 
@@ -105,36 +107,27 @@ export default function RenditeKompass() {
     const flexStBasis = flexGewinn * 0.5 * (1 - TF_FLEX);
     const breakEvenSt = flexStBasis > 0 ? (flex.bruttoEndwert - depot.nettoEndwert) / flexStBasis : null;
 
-    const chartData = [
-      { jahr:0, depot:startkapital, flex:startkapital, eingezahlt:startkapital },
-    ];
+    const chartData = [{ jahr:0, depot:startkapital, flex:startkapital, eingezahlt:startkapital }];
     for (let j = 1; j <= laufzeit; j++) {
       chartData.push({
-        jahr:       j,
-        depot:      depot.jahre[j-1].brutto,
-        flex:       flex.jahre[j-1].brutto,
+        jahr: j,
+        depot: depot.jahre[j-1].brutto,
+        flex:  flex.jahre[j-1].brutto,
         eingezahlt: depot.jahre[j-1].eingezahlt,
       });
     }
-    const schwanzEnde = laufzeit + Math.round(laufzeit * 0.15);
-    // Eingezahltes Kapital bleibt konstant auf letztem Wert (keine neuen Einzahlungen)
+    const schwanzEnde      = laufzeit + Math.round(laufzeit * 0.15);
     const letzteEinzahlung = depot.jahre[laufzeit-1].eingezahlt;
-    chartData.push({
-      jahr: laufzeit + 1,
-      depot: depot.nettoEndwert, flex: flex.nettoEndwert, eingezahlt: letzteEinzahlung,
-    });
-    chartData.push({
-      jahr: schwanzEnde,
-      depot: depot.nettoEndwert, flex: flex.nettoEndwert, eingezahlt: letzteEinzahlung,
-    });
+    chartData.push({ jahr: laufzeit + 1,  depot: depot.nettoEndwert, flex: flex.nettoEndwert, eingezahlt: letzteEinzahlung });
+    chartData.push({ jahr: schwanzEnde,   depot: depot.nettoEndwert, flex: flex.nettoEndwert, eingezahlt: letzteEinzahlung });
 
     const accentColor = depot.nettoEndwert >= flex.nettoEndwert ? "#22d3ee" : "#ff8c00";
     return { depot, flex, chartData, breakEvenSt, accentColor };
-  }, [laufzeit, sparrate, startkapital, bruttoRendite, steuersatz, fondskosten, vorabDrag, rebalDrag, flexKosten]);
+  }, [laufzeit, sparrate, startkapital, bruttoRendite, steuersatz, kapSt, fondskosten, vorabDrag, rebalDrag, flexKosten]);
 
-  const COLORS = { depot:"#22d3ee", flex:"#ff8c00", ein:"rgba(255,255,255,0.18)" };
-  const accent = R.accentColor;
-  const tabs   = [["vergleich","Vergleich"],["depot","Depot-Detail"],["flex","Flex-Detail"]];
+  const COLORS      = { depot:"#22d3ee", flex:"#ff8c00", ein:"rgba(255,255,255,0.18)" };
+  const accent      = R.accentColor;
+  const tabs        = [["vergleich","Vergleich"],["depot","Depot-Detail"],["flex","Flex-Detail"]];
   const depotNettoR = (bruttoRendite - fondskosten - vorabDrag - rebalDrag).toFixed(2);
   const flexNettoR  = (bruttoRendite - flexKosten).toFixed(2);
 
@@ -169,18 +162,21 @@ export default function RenditeKompass() {
           <div className="card">
             <div className="lbl" style={{ marginBottom:"1rem" }}>Allgemeine Parameter</div>
             {[
-              { label:"Laufzeit",        val:laufzeit,      set:setLaufzeit,      min:10,   max:50,    step:1,    unit:"Jahre" },
-              { label:"Sparrate",        val:sparrate,       set:setSparrate,      min:100,  max:1500,  step:50,   unit:"€/Mo" },
-              { label:"Startkapital",    val:startkapital,   set:setStartkapital,  min:0,    max:200000,step:5000, unit:"€" },
-              { label:"Brutto-Rendite",  val:bruttoRendite,  set:setBruttoRendite, min:2,    max:12,    step:0.25, unit:"% p.a." },
-              { label:"Grenzsteuersatz", val:steuersatz,     set:setSteuersatz,    min:14,   max:45,    step:1,    unit:"%" },
-            ].map(({ label, val, set, min, max, step, unit }) => (
+              { label:"Laufzeit",             val:laufzeit,      set:setLaufzeit,      min:10,  max:50,    step:1,    unit:"Jahre" },
+              { label:"Sparrate",             val:sparrate,      set:setSparrate,      min:100, max:1500,  step:50,   unit:"€/Mo" },
+              { label:"Startkapital",         val:startkapital,  set:setStartkapital,  min:0,   max:200000,step:5000, unit:"€" },
+              { label:"Brutto-Rendite",       val:bruttoRendite, set:setBruttoRendite, min:2,   max:12,    step:0.25, unit:"% p.a." },
+              { label:"Grenzsteuersatz",      val:steuersatz,    set:setSteuersatz,    min:14,  max:45,    step:1,    unit:"%" },
+              { label:"Kapitalertragsteuer",  val:kapSt,         set:setKapSt,         min:20,  max:50,    step:1,    unit:"%",
+                hint:"Ohne Soli: 25% · Inkl. Soli: 26,375% · Standard-Ansatz: 27%" },
+            ].map(({ label, val, set, min, max, step, unit, hint }) => (
               <div key={label} style={{ marginBottom:"1rem" }}>
                 <div style={{ display:"flex", justifyContent:"space-between", marginBottom:"0.3rem" }}>
                   <span style={{ fontSize:"0.74rem", color:"rgba(212,232,194,0.6)" }}>{label}</span>
                   <span style={{ fontSize:"0.74rem", color:"rgba(212,232,194,0.7)" }}>{val.toLocaleString("de-DE")} {unit}</span>
                 </div>
                 <input type="range" min={min} max={max} step={step} value={val} onChange={e => set(parseFloat(e.target.value))} />
+                {hint && <div style={{ fontSize:"0.58rem", color:"rgba(212,232,194,0.24)", marginTop:"0.3rem", lineHeight:1.5 }}>{hint}</div>}
               </div>
             ))}
           </div>
@@ -193,17 +189,16 @@ export default function RenditeKompass() {
               {" "}= <span style={{ color:"#22d3ee", fontWeight:"bold" }}>{depotNettoR}% Nettorendite p.a.</span>
             </div>
             {[
-              { label:"Effektive Fondskosten (TD)", val:fondskosten, set:setFondskosten, min:0.05, max:0.50, step:0.01, color:"#22d3ee", hint:"" },
+              { label:"Effektive Fondskosten (TD)", val:fondskosten, set:setFondskosten, min:0.05, max:0.50, step:0.01, color:"#22d3ee" },
               { label:"Vorabpauschale-Drag",        val:vorabDrag,   set:setVorabDrag,   min:0.00, max:0.30, step:0.01, color:"#22d3ee" },
-              { label:"Rebalancing Steuer-Drag",    val:rebalDrag,   set:setRebalDrag,   min:0.00, max:1.00, step:0.05, color:"#22d3ee", hint:"" },
-            ].map(({ label, val, set, min, max, step, color, hint }) => (
+              { label:"Rebalancing Steuer-Drag",    val:rebalDrag,   set:setRebalDrag,   min:0.00, max:1.00, step:0.05, color:"#22d3ee" },
+            ].map(({ label, val, set, min, max, step, color }) => (
               <div key={label} style={{ marginBottom:"1.1rem" }}>
                 <div style={{ display:"flex", justifyContent:"space-between", marginBottom:"0.3rem" }}>
                   <span style={{ fontSize:"0.74rem", color:"rgba(212,232,194,0.6)" }}>{label}</span>
                   <span style={{ fontSize:"0.74rem", color }}>−{val.toFixed(2)} %</span>
                 </div>
                 <input type="range" min={min} max={max} step={step} value={val} onChange={e => set(parseFloat(e.target.value))} />
-                {hint && <div style={{ fontSize:"0.58rem", color:"rgba(212,232,194,0.24)", marginTop:"0.3rem", lineHeight:1.5 }}>{hint}</div>}
               </div>
             ))}
           </div>
@@ -227,7 +222,7 @@ export default function RenditeKompass() {
               <div>✓ Keine Vorabpauschale</div>
               <div>✓ Steuer erst bei Auszahlung (HEV)</div>
               <div>✗ Höhere laufende Kosten</div>
-              <div>✗ Grenzsteuersatz statt 27%</div>
+              <div>✗ Grenzsteuersatz statt {kapSt}%</div>
             </div>
           </div>
 
@@ -235,8 +230,8 @@ export default function RenditeKompass() {
             <div className="lbl" style={{ marginBottom:"0.6rem" }}>Steuerlogik am Ende</div>
             <div style={{ fontSize:"0.66rem", color:"rgba(212,232,194,0.4)", lineHeight:2.1 }}>
               <div style={{ color:"#22d3ee", marginBottom:"0.2rem" }}>ETF-Depot:</div>
-              <div>Gewinn × 70% × 27%</div>
-              <div style={{ color:"#4ade80", marginBottom:"0.6rem" }}>= {fmtPct(EFF_ST_DEPOT)} eff. Steuersatz</div>
+              <div>Gewinn × 70% × {kapSt}%</div>
+              <div style={{ color:"#4ade80", marginBottom:"0.6rem" }}>= {fmtPct(R.depot.effStDepot)} eff. Steuersatz</div>
               <div style={{ color:"#ff8c00", marginBottom:"0.2rem" }}>Flex-Versicherung:</div>
               <div>Gewinn × 50% × 85% × {steuersatz}%</div>
               <div style={{ color:"#4ade80" }}>= {fmtPct(0.5*(1-TF_FLEX)*steuersatz/100)} eff. Steuersatz</div>
@@ -332,7 +327,7 @@ export default function RenditeKompass() {
                     { label:"Netto nach Steuer",  vals:[R.depot, R.flex].map(r => fmt(r.nettoEndwert)), bold:true },
                     { label:"Netto-Ertrag",       vals:[R.depot, R.flex].map(r => fmt(r.nettoEndwert - r.gesamtEingezahlt)) },
                     { label:"Eingezahlt",         vals:[R.depot, R.flex].map(r => fmt(r.gesamtEingezahlt)) },
-                    { label:"Differenz Netto",    vals:["—", fmtPct((R.flex.nettoEndwert - R.depot.nettoEndwert) / R.depot.nettoEndwert, 1)] },
+                    { label:"Differenz Netto",    vals:["—", fmtPP((R.flex.nettoEndwert - R.depot.nettoEndwert) / R.depot.nettoEndwert)] },
                   ].map(({ label, vals, bold, red }) => (
                     <tr key={label} style={{ borderBottom:"1px solid rgba(212,232,194,0.05)" }}>
                       <td style={{ padding:"0.35rem 0.5rem", color:"rgba(212,232,194,0.42)", fontSize:"0.74rem" }}>{label}</td>
@@ -347,17 +342,16 @@ export default function RenditeKompass() {
               </table>
             </div>
 
-            <InterpretationBlock R={R} steuersatz={steuersatz} laufzeit={laufzeit}
+            <InterpretationBlock R={R} steuersatz={steuersatz} kapSt={kapSt} laufzeit={laufzeit}
               fondskosten={fondskosten} vorabDrag={vorabDrag} rebalDrag={rebalDrag} flexKosten={flexKosten} accent={accent} />
-
           </>}
 
           {activeTab === "depot" && <>
             <div style={{ display:"grid", gridTemplateColumns: isNarrow ? "1fr 1fr" : "repeat(3,1fr)", gap:"0.8rem" }}>
               {[
-                { label:"Nettorendite p.a.", val:fmtPct(R.depot.nettoRendite),  c:COLORS.depot },
-                { label:"Vor Steuer",        val:fmt(R.depot.bruttoEndwert),     c:"rgba(212,232,194,0.6)" },
-                { label:"Schlusssteuer",     val:fmt(R.depot.schlusssteuer),      c:"#f87171" },
+                { label:"Nettorendite p.a.", val:fmtPct(R.depot.nettoRendite), c:COLORS.depot },
+                { label:"Vor Steuer",        val:fmt(R.depot.bruttoEndwert),    c:"rgba(212,232,194,0.6)" },
+                { label:"Schlusssteuer",     val:fmt(R.depot.schlusssteuer),    c:"#f87171" },
               ].map(({ label, val, c }) => (
                 <div key={label} className="card">
                   <div className="lbl" style={{ color:c, marginBottom:"0.4rem" }}>{label}</div>
@@ -369,11 +363,11 @@ export default function RenditeKompass() {
               <div className="card">
                 <div className="lbl" style={{ marginBottom:"0.8rem" }}>Renditezerlegung</div>
                 {[
-                  ["Brutto-Rendite",           `${bruttoRendite.toFixed(2)} %`, "#d4e8c2"],
-                  ["− Fondskosten (TD)",        `−${fondskosten.toFixed(2)} %`, "#f97316"],
-                  ["− Vorabpauschale-Drag",     `−${vorabDrag.toFixed(2)} %`,   "#22d3ee"],
-                  ["− Rebalancing-Drag",        `−${rebalDrag.toFixed(2)} %`,   "#f87171"],
-                  ["= Nettorendite p.a.",       `${depotNettoR} %`,             "#4ade80"],
+                  ["Brutto-Rendite",       `${bruttoRendite.toFixed(2)} %`, "#d4e8c2"],
+                  ["− Fondskosten (TD)",   `−${fondskosten.toFixed(2)} %`,  "#f97316"],
+                  ["− Vorabpauschale-Drag",`−${vorabDrag.toFixed(2)} %`,    "#22d3ee"],
+                  ["− Rebalancing-Drag",   `−${rebalDrag.toFixed(2)} %`,    "#f87171"],
+                  ["= Nettorendite p.a.",  `${depotNettoR} %`,              "#4ade80"],
                 ].map(([k,v,c]) => (
                   <div key={k} className="row">
                     <span style={{ color:"rgba(212,232,194,0.45)", fontSize:"0.74rem" }}>{k}</span>
@@ -384,12 +378,12 @@ export default function RenditeKompass() {
               <div className="card">
                 <div className="lbl" style={{ marginBottom:"0.8rem" }}>Schlusssteuer-Herleitung</div>
                 {[
-                  ["Vor-Steuer-Endwert",      fmt(R.depot.bruttoEndwert),                                 "#d4e8c2"],
-                  ["− Eingezahlt",            fmt(R.depot.gesamtEingezahlt),                              "#d4e8c2"],
-                  ["= Gewinn",                fmt(R.depot.bruttoEndwert - R.depot.gesamtEingezahlt),      "#d4e8c2"],
-                  ["× 70% (30% Teilfreist.)", fmt((R.depot.bruttoEndwert-R.depot.gesamtEingezahlt)*0.7), "#d4e8c2"],
-                  ["× 27% KapESt",            fmt(R.depot.schlusssteuer),                                 "#f87171"],
-                  ["= Netto-Endwert",         fmt(R.depot.nettoEndwert),                                  "#4ade80"],
+                  ["Vor-Steuer-Endwert",      fmt(R.depot.bruttoEndwert),                                  "#d4e8c2"],
+                  ["− Eingezahlt",            fmt(R.depot.gesamtEingezahlt),                               "#d4e8c2"],
+                  ["= Gewinn",                fmt(R.depot.bruttoEndwert - R.depot.gesamtEingezahlt),       "#d4e8c2"],
+                  ["× 70% (30% Teilfreist.)", fmt((R.depot.bruttoEndwert-R.depot.gesamtEingezahlt)*0.7),  "#d4e8c2"],
+                  [`× ${kapSt}% KapESt`,      fmt(R.depot.schlusssteuer),                                  "#f87171"],
+                  ["= Netto-Endwert",         fmt(R.depot.nettoEndwert),                                   "#4ade80"],
                 ].map(([k,v,c]) => (
                   <div key={k} className="row">
                     <span style={{ color:"rgba(212,232,194,0.45)", fontSize:"0.74rem" }}>{k}</span>
@@ -427,9 +421,9 @@ export default function RenditeKompass() {
           {activeTab === "flex" && <>
             <div style={{ display:"grid", gridTemplateColumns: isNarrow ? "1fr 1fr" : "repeat(3,1fr)", gap:"0.8rem" }}>
               {[
-                { label:"Nettorendite p.a.",  val:fmtPct(R.flex.nettoRendite), c:COLORS.flex },
-                { label:"Vor Steuer",         val:fmt(R.flex.bruttoEndwert),   c:"rgba(212,232,194,0.6)" },
-                { label:"Schlusssteuer (HEV)",val:fmt(R.flex.schlusssteuer),   c:"#f87171" },
+                { label:"Nettorendite p.a.",   val:fmtPct(R.flex.nettoRendite), c:COLORS.flex },
+                { label:"Vor Steuer",          val:fmt(R.flex.bruttoEndwert),   c:"rgba(212,232,194,0.6)" },
+                { label:"Schlusssteuer (HEV)", val:fmt(R.flex.schlusssteuer),   c:"#f87171" },
               ].map(({ label, val, c }) => (
                 <div key={label} className="card">
                   <div className="lbl" style={{ color:c, marginBottom:"0.4rem" }}>{label}</div>
@@ -441,13 +435,13 @@ export default function RenditeKompass() {
               <div className="card">
                 <div className="lbl" style={{ marginBottom:"0.8rem", color:COLORS.flex }}>Schlusssteuer-Herleitung (HEV)</div>
                 {[
-                  ["Vor-Steuer-Endwert",        fmt(R.flex.bruttoEndwert),                                "#d4e8c2"],
-                  ["− Eingezahlt",              fmt(R.flex.gesamtEingezahlt),                             "#d4e8c2"],
-                  ["= Gewinn",                  fmt(R.flex.bruttoEndwert - R.flex.gesamtEingezahlt),      "#d4e8c2"],
-                  ["× 50% (Halbeinkünfte)",     fmt((R.flex.bruttoEndwert-R.flex.gesamtEingezahlt)*0.5), "#d4e8c2"],
-                  ["× 85% (−15% Teilfreist.)",  fmt(R.flex.steuerpflichtig),                             "#d4e8c2"],
-                  [`× ${steuersatz}% Grenzst.`, fmt(R.flex.schlusssteuer),                                "#f87171"],
-                  ["= Netto-Endwert",           fmt(R.flex.nettoEndwert),                                 "#4ade80"],
+                  ["Vor-Steuer-Endwert",        fmt(R.flex.bruttoEndwert),                                 "#d4e8c2"],
+                  ["− Eingezahlt",              fmt(R.flex.gesamtEingezahlt),                              "#d4e8c2"],
+                  ["= Gewinn",                  fmt(R.flex.bruttoEndwert - R.flex.gesamtEingezahlt),       "#d4e8c2"],
+                  ["× 50% (Halbeinkünfte)",     fmt((R.flex.bruttoEndwert-R.flex.gesamtEingezahlt)*0.5),  "#d4e8c2"],
+                  ["× 85% (−15% Teilfreist.)",  fmt(R.flex.steuerpflichtig),                              "#d4e8c2"],
+                  [`× ${steuersatz}% Grenzst.`, fmt(R.flex.schlusssteuer),                                 "#f87171"],
+                  ["= Netto-Endwert",           fmt(R.flex.nettoEndwert),                                  "#4ade80"],
                 ].map(([k,v,c]) => (
                   <div key={k} className="row">
                     <span style={{ color:"rgba(212,232,194,0.45)", fontSize:"0.74rem" }}>{k}</span>
@@ -531,7 +525,7 @@ function ChartMitSprung({ data, laufzeit, COLORS }) {
   );
 }
 
-function InterpretationBlock({ R, steuersatz, laufzeit, fondskosten, vorabDrag, rebalDrag, flexKosten, accent }) {
+function InterpretationBlock({ R, steuersatz, kapSt, laufzeit, fondskosten, vorabDrag, rebalDrag, flexKosten, accent }) {
   const winner    = R.depot.nettoEndwert > R.flex.nettoEndwert ? "ETF-Depot" : "Flex-Versicherung";
   const diff      = Math.abs(R.depot.nettoEndwert - R.flex.nettoEndwert);
   const depotDrag = (fondskosten + vorabDrag + rebalDrag).toFixed(2);
@@ -544,7 +538,7 @@ function InterpretationBlock({ R, steuersatz, laufzeit, fondskosten, vorabDrag, 
           { text:`Depot-Nettorendite: ${(R.depot.nettoRendite*100).toFixed(2)}% (nach ${depotDrag}% Abschlägen). Flex-Nettorendite: ${(R.flex.nettoRendite*100).toFixed(2)}% (nach ${flexKosten.toFixed(2)}% Kosten).` },
           { text: R.flex.nettoEndwert > R.depot.nettoEndwert
               ? `Flex gewinnt: Günstigere HEV-Schlusssteuer schlägt die Abgeltungssteuer trotz höherer Kosten bei ${steuersatz}% Grenzsteuersatz.`
-              : `Depot gewinnt: Geringere Kosten + effektiv 18,9% Abgeltungssteuer schlägt das Halbeinkünfteverfahren bei ${steuersatz}% Grenzsteuersatz.` },
+              : `Depot gewinnt: Geringere Kosten + effektiv ${(R.depot.effStDepot*100).toFixed(1)}% Abgeltungssteuer schlägt das Halbeinkünfteverfahren bei ${steuersatz}% Grenzsteuersatz.` },
           { text:`Tipp: Break-even Steuersatz beachten – im Rentenalter oft 25–30%. Grenzsteuersatz-Regler auf Rentenniveau setzen!` },
         ].map((l,i) => (
           <div key={i} style={{ fontSize:"0.76rem", color:"rgba(212,232,194,0.6)", lineHeight:1.65,
