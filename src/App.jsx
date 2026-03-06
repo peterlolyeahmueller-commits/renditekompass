@@ -84,6 +84,7 @@ export default function RenditeKompass() {
   const [bruttoRendite, setBruttoRendite] = useState(7);
   const [steuersatz,    setSteuersatz]    = useState(20);
   const [kapSt,         setKapSt]         = useState(27);
+  const [kapGleichEst,  setKapGleichEst]  = useState(false);
   const [fondskosten,   setFondskosten]   = useState(0.20);
   const [vorabDrag,     setVorabDrag]     = useState(0.15);
   const [rebalDrag,     setRebalDrag]     = useState(0.40);
@@ -93,6 +94,10 @@ export default function RenditeKompass() {
   const isMobile = vw < 860;
   const isNarrow = vw < 560;
   const isMedium = vw < 1100;
+
+  useEffect(() => {
+    if (kapGleichEst) setKapSt(steuersatz);
+  }, [kapGleichEst, steuersatz]);
 
   const R = useMemo(() => {
     const r  = bruttoRendite / 100;
@@ -162,15 +167,15 @@ export default function RenditeKompass() {
           <div className="card">
             <div className="lbl" style={{ marginBottom:"1rem" }}>Allgemeine Parameter</div>
             {[
-              { label:"Laufzeit",             val:laufzeit,      set:setLaufzeit,      min:12,  max:50,    step:1,    unit:"Jahre" },
+              { label:"Laufzeit",             val:laufzeit,      set:setLaufzeit,      min:10,  max:50,    step:1,    unit:"Jahre" },
               { label:"Sparrate",             val:sparrate,      set:setSparrate,      min:100, max:1500,  step:50,   unit:"€/Mo" },
               { label:"Startkapital",         val:startkapital,  set:setStartkapital,  min:0,   max:200000,step:5000, unit:"€" },
               { label:"Brutto-Rendite",       val:bruttoRendite, set:setBruttoRendite, min:2,   max:12,    step:0.25, unit:"% p.a." },
               { label:"Grenzsteuersatz",      val:steuersatz,    set:setSteuersatz,    min:14,  max:45,    step:1,    unit:"%" },
               { label:"Kapitalertragsteuer",  val:kapSt,         set:setKapSt,         min:20,  max:50,    step:1,    unit:"%",
-                hint:"Ohne Soli: 25% · Inkl. Soli: 26,375% · Standard-Ansatz: 27%" },
+                hint:"Ohne Soli: 25% · Inkl. Soli: 26,375% · Standard-Ansatz: 27%", disabled:kapGleichEst },
             ].map(({ label, val, set, min, max, step, unit, hint }) => (
-              <div key={label} style={{ marginBottom:"1rem" }}>
+              <div key={label} style={{ marginBottom:"1rem", opacity: label==="Kapitalertragsteuer" && kapGleichEst ? 0.35 : 1, pointerEvents: label==="Kapitalertragsteuer" && kapGleichEst ? "none" : "auto" }}>
                 <div style={{ display:"flex", justifyContent:"space-between", marginBottom:"0.3rem" }}>
                   <span style={{ fontSize:"0.74rem", color:"rgba(212,232,194,0.6)" }}>{label}</span>
                   <span style={{ fontSize:"0.74rem", color:"rgba(212,232,194,0.7)" }}>{val.toLocaleString("de-DE")} {unit}</span>
@@ -179,6 +184,21 @@ export default function RenditeKompass() {
                 {hint && <div style={{ fontSize:"0.58rem", color:"rgba(212,232,194,0.24)", marginTop:"0.3rem", lineHeight:1.5 }}>{hint}</div>}
               </div>
             ))}
+            <div onClick={() => setKapGleichEst(!kapGleichEst)}
+              style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
+                padding:"0.5rem 0", borderTop:"1px solid rgba(212,232,194,0.08)", marginTop:"0.2rem", cursor:"pointer" }}>
+              <span style={{ fontSize:"0.74rem", color: kapGleichEst ? "#d4e8c2" : "rgba(212,232,194,0.6)" }}>
+                KapESt = Einkommensteuersatz
+              </span>
+              <div style={{ width:"36px", height:"20px", borderRadius:"10px", flexShrink:0,
+                background: kapGleichEst ? "#22d3ee" : "rgba(212,232,194,0.15)",
+                position:"relative", transition:"background 0.2s" }}>
+                <div style={{ position:"absolute", top:"3px",
+                  left: kapGleichEst ? "19px" : "3px",
+                  width:"14px", height:"14px", borderRadius:"50%",
+                  background:"#fff", transition:"left 0.2s" }} />
+              </div>
+            </div>
           </div>
 
           <div className="card">
