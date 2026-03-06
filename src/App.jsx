@@ -193,7 +193,7 @@ export default function RenditeKompass() {
               {" "}= <span style={{ color:"#22d3ee", fontWeight:"bold" }}>{depotNettoR}% Nettorendite p.a.</span>
             </div>
             {[
-              { label:"Effektive Fondskosten (TD)", val:fondskosten, set:setFondskosten, min:0.05, max:0.50, step:0.05, color:"#22d3ee", hint:"" },
+              { label:"Effektive Fondskosten (TD)", val:fondskosten, set:setFondskosten, min:0.05, max:0.50, step:0.01, color:"#22d3ee", hint:"" },
               { label:"Vorabpauschale-Drag",        val:vorabDrag,   set:setVorabDrag,   min:0.00, max:0.30, step:0.01, color:"#22d3ee" },
               { label:"Rebalancing Steuer-Drag",    val:rebalDrag,   set:setRebalDrag,   min:0.00, max:1.00, step:0.05, color:"#22d3ee", hint:"" },
             ].map(({ label, val, set, min, max, step, color, hint }) => (
@@ -220,7 +220,7 @@ export default function RenditeKompass() {
                 <span style={{ fontSize:"0.74rem", color:"rgba(212,232,194,0.6)" }}>Effektivkostensatz p.a.</span>
                 <span style={{ fontSize:"0.74rem", color:"#ff8c00" }}>−{flexKosten.toFixed(2)} %</span>
               </div>
-              <input type="range" min={0.30} max={2.50} step={0.05} value={flexKosten} onChange={e => setFlexKosten(parseFloat(e.target.value))} />
+              <input type="range" min={0.30} max={2.50} step={0.01} value={flexKosten} onChange={e => setFlexKosten(parseFloat(e.target.value))} />
             </div>
             <div className="inset" style={{ fontSize:"0.66rem", color:"rgba(212,232,194,0.4)", lineHeight:1.9 }}>
               <div>✓ Rebalancing steuerfrei</div>
