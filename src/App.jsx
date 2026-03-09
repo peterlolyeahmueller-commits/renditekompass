@@ -168,7 +168,7 @@ export default function RenditeKompass() {
             <div className="lbl" style={{ marginBottom:"1rem" }}>Allgemeine Parameter</div>
             {[
               { label:"Laufzeit",             val:laufzeit,      set:setLaufzeit,      min:10,  max:50,    step:1,    unit:"Jahre" },
-              { label:"Sparrate",             val:sparrate,      set:setSparrate,      min:100, max:1500,  step:50,   unit:"€/Mo" },
+              { label:"Sparrate",             val:sparrate,      set:setSparrate,      min:25, max:1000,  step:25,   unit:"€/Mo" },
               { label:"Startkapital",         val:startkapital,  set:setStartkapital,  min:0,   max:200000,step:5000, unit:"€" },
               { label:"Brutto-Rendite",       val:bruttoRendite, set:setBruttoRendite, min:2,   max:12,    step:0.25, unit:"% p.a." },
               { label:"Grenzsteuersatz",      val:steuersatz,    set:setSteuersatz,    min:14,  max:45,    step:1,    unit:"%" },
